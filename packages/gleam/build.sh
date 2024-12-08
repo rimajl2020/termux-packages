@@ -2,11 +2,12 @@ TERMUX_PKG_HOMEPAGE=https://gleam.run
 TERMUX_PKG_DESCRIPTION="A friendly language for building type-safe, scalable systems!"
 TERMUX_PKG_LICENSE="Apache-2.0"
 TERMUX_PKG_MAINTAINER="@termux"
-TERMUX_PKG_VERSION="1.6.1"
+TERMUX_PKG_VERSION="1.6.3"
 TERMUX_PKG_SRCURL=https://github.com/gleam-lang/gleam/archive/refs/tags/v${TERMUX_PKG_VERSION}.tar.gz
-TERMUX_PKG_SHA256=86bdaa4b7803230bd434044e0632f6d31246a8514fd68d10c3add9dfff400544
+TERMUX_PKG_SHA256=2d73320ebe7ea7154ca63f08f70b19de8e283bd198b5ce58fae19c01187e65d6
 TERMUX_PKG_DEPENDS="erlang"
-TERMUX_PKG_SUGGESTS="nodejs"
+TERMUX_PKG_SUGGESTS="nodejs | nodejs-lts"
+TERMUX_PKG_ANTI_BUILD_DEPENDS="nodejs, nodejs-lts"
 TERMUX_PKG_AUTO_UPDATE=true
 TERMUX_PKG_BUILD_IN_SRC=true
 
