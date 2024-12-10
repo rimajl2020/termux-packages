@@ -2,9 +2,10 @@ TERMUX_PKG_HOMEPAGE=https://www.rust-lang.org/
 TERMUX_PKG_DESCRIPTION="Systems programming language focused on safety, speed and concurrency"
 TERMUX_PKG_LICENSE="MIT"
 TERMUX_PKG_MAINTAINER="@termux"
-TERMUX_PKG_VERSION="1.82.0"
+TERMUX_PKG_VERSION="1.83.0"
+TERMUX_PKG_REVISION=2
 TERMUX_PKG_SRCURL=https://static.rust-lang.org/dist/rustc-${TERMUX_PKG_VERSION}-src.tar.xz
-TERMUX_PKG_SHA256=1276a0bb8fa12288ba6fa96597d28b40e74c44257c051d3bc02c2b049bb38210
+TERMUX_PKG_SHA256=7b11d4242dab0921a7d54758ad3fe805153c979c144625fecde11735760f97df
 _LLVM_MAJOR_VERSION=$(. $TERMUX_SCRIPTDIR/packages/libllvm/build.sh; echo $LLVM_MAJOR_VERSION)
 _LLVM_MAJOR_VERSION_NEXT=$((_LLVM_MAJOR_VERSION + 1))
 _LZMA_VERSION=$(. $TERMUX_SCRIPTDIR/packages/liblzma/build.sh; echo $TERMUX_PKG_VERSION)
@@ -132,7 +133,7 @@ termux_step_configure() {
 	# like 30 to 40 + minutes ... so lets get it right
 
 	# upstream tests build using versions N and N-1
-	local BOOTSTRAP_VERSION=1.81.0
+	local BOOTSTRAP_VERSION=1.82.0
 	if [[ "${TERMUX_ON_DEVICE_BUILD}" == "false" ]]; then
 		if ! rustup install "${BOOTSTRAP_VERSION}"; then
 			echo "WARN: ${BOOTSTRAP_VERSION} is unavailable, fallback to stable version!"
@@ -184,6 +185,8 @@ termux_step_configure() {
 	"${AR}" rcu "${RUST_LIBDIR}/libsyncfs.a" syncfs.o
 	export CARGO_TARGET_${env_host}_RUSTFLAGS+=" -C link-arg=-l:libsyncfs.a"
 
+	export CARGO_TARGET_${env_host}_RUSTFLAGS+=" -C link-arg=-Wl,-rpath=${TERMUX_PREFIX}/lib -C link-arg=-Wl,--enable-new-dtags"
+
 	export X86_64_UNKNOWN_LINUX_GNU_OPENSSL_LIB_DIR=/usr/lib/x86_64-linux-gnu
 	export X86_64_UNKNOWN_LINUX_GNU_OPENSSL_INCLUDE_DIR=/usr/include
 	export PKG_CONFIG_ALLOW_CROSS=1
@@ -191,6 +194,8 @@ termux_step_configure() {
 	export CC_x86_64_unknown_linux_gnu=gcc
 	export CFLAGS_x86_64_unknown_linux_gnu="-O2"
 	export RUST_BACKTRACE=full
+
+	unset CC CFLAGS CFLAGS_${env_host} CPP CPPFLAGS CXX CXXFLAGS LD LDFLAGS PKG_CONFIG RANLIB
 }
 
 termux_step_make() {
@@ -198,17 +203,6 @@ termux_step_make() {
 }
 
 termux_step_make_install() {
-	unset CC CFLAGS CPP CPPFLAGS CXX CXXFLAGS LD LDFLAGS PKG_CONFIG RANLIB
-
-	# needed to workaround build issue that only happens on x86_64
-	# /home/runner/.termux-build/rust/build/build/bootstrap/debug/bootstrap: error while loading shared libraries: /lib/x86_64-linux-gnu/libc.so: invalid ELF header
-	if [[ "${TERMUX_ON_DEVICE_BUILD}" == "false" ]] && [[ "${TERMUX_ARCH}" == "x86_64" ]]; then
-		mv -v ${TERMUX_PREFIX}{,.tmp}
-		${TERMUX_PKG_SRCDIR}/x.py build -j ${TERMUX_PKG_MAKE_PROCESSES} --host x86_64-unknown-linux-gnu --stage 1 cargo
-		[[ -d "${TERMUX_PREFIX}" ]] && termux_error_exit "Contaminated PREFIX found:\n$(find ${TERMUX_PREFIX} | sort)"
-		mv -v ${TERMUX_PREFIX}{.tmp,}
-	fi
-
 	# install causes on device build fail to continue
 	# dist uses a lot of spaces on CI
 	local job="install"
@@ -294,4 +288,14 @@ termux_step_make_install() {
 
 	export _INCLUDED=$(echo -e "${_included}\n${_included_rlib}\n${_included_so}")
 	echo -e "INFO: _INCLUDED:\n${_INCLUDED}"
+
+	# check runpath entry
+	local cargo_readelf=$(${READELF} -d ${TERMUX_PREFIX}/bin/cargo)
+	local cargo_runpath=$(echo "${cargo_readelf}" | sed -ne "s|.*RUNPATH.*\[\(.*\)\].*|\1|p")
+	if [[ "${cargo_runpath}" != "${TERMUX_PREFIX}/lib" ]]; then
+		termux_error_exit "
+		Mismatch RUNPATH found. Check readelf output below:
+		${cargo_readelf}
+		"
+	fi
 }
